@@ -2,39 +2,36 @@ FROM php:8.2-apache
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git unzip curl libpng-dev libonig-dev libxml2-dev zip libpq-dev \
-    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd
+    git unzip curl libpng-dev libonig-dev libxml2-dev zip \
+    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
 
-# Enable Apache Rewrite
+# Enable Apache Rewrite Module
 RUN a2enmod rewrite
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy Laravel app files
+# Copy Laravel files
 COPY . .
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 storage bootstrap/cache
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
-# Ensure .env exists (Laravel requires it)
-RUN if [ ! -f .env ]; then cp .env.example .env; fi
+# Set Apache DocumentRoot to Laravel's public folder
+RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 
-# Install dependencies and generate app key
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader \
-    && php artisan config:clear \
-    && php artisan key:generate
-
-# Apache config for .htaccess
+# Add Directory permissions for Laravel public folder
 RUN echo '<Directory /var/www/html/public>\n\
     AllowOverride All\n\
+    Require all granted\n\
 </Directory>' >> /etc/apache2/apache2.conf
 
-# Expose port 8000
+# Fix permissions
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Expose port
 EXPOSE 8000
 
+# Start Apache
 CMD ["apache2-foreground"]
