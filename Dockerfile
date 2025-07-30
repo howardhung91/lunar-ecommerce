@@ -1,6 +1,6 @@
 FROM php:8.3-cli
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     unzip \
     git \
@@ -17,20 +17,20 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy files
+# Copy Laravel app
 COPY . .
 
 # Install PHP dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
-# Laravel permission fix
+# Set permissions
 RUN chmod -R 775 storage bootstrap/cache && \
     chown -R www-data:www-data storage bootstrap/cache
 
-# Expose port 8000
+# Laravel will run on port 8000
 EXPOSE 8000
 
-# Start Laravel with migration
+# Start Laravel dev server (NO Apache, NO php-fpm)
 CMD php artisan config:clear && \
     php artisan migrate --force && \
     php artisan serve --host=0.0.0.0 --port=8000
