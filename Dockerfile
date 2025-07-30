@@ -1,37 +1,40 @@
-# Use official PHP with Apache image
 FROM php:8.2-apache
 
-# Install system dependencies and PHP extensions
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git unzip curl libpng-dev libonig-dev libxml2-dev zip \
-    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd
+    git unzip curl libpng-dev libonig-dev libxml2-dev zip libpq-dev \
+    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd
 
-# Enable Apache Rewrite Module
+# Enable Apache Rewrite
 RUN a2enmod rewrite
 
 # Set working directory
-WORKDIR /workspace
+WORKDIR /var/www/html
 
-# Copy all files
+# Copy Laravel app files
 COPY . .
 
-# Set proper document root to Laravel's public folder
-RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /workspace/public|g' /etc/apache2/sites-available/000-default.conf
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 storage bootstrap/cache
 
-# Optional: Fix Apache server name warning
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
-
-# Copy Composer from Composer image
+# Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Install Laravel dependencies
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+# Ensure .env exists (Laravel requires it)
+RUN if [ ! -f .env ]; then cp .env.example .env; fi
 
-# Set permissions
-RUN chown -R www-data:www-data /workspace/storage /workspace/bootstrap/cache
+# Install dependencies and generate app key
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader \
+    && php artisan config:clear \
+    && php artisan key:generate
 
-# Expose the correct port for Koyeb
-EXPOSE 80
+# Apache config for .htaccess
+RUN echo '<Directory /var/www/html/public>\n\
+    AllowOverride All\n\
+</Directory>' >> /etc/apache2/apache2.conf
 
-# Start Apache in foreground
+# Expose port 8000
+EXPOSE 8000
+
 CMD ["apache2-foreground"]
